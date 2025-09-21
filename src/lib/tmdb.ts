@@ -1,10 +1,34 @@
-const TMDB_API_KEY = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzNDA2YTNlNDUxZjc0NjEzM2QzMjk5NmUzMGVlYjk4NSIsIm5iZiI6MTUzMTUwNjc0Mi42ODUsInN1YiI6IjViNDhmMDM2YzNhMzY4NDUyZDAwZTdlZiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.Y79gp5dxM4slMHKuJZZQii7qu6aSHtcDYM53L9r2GD8';
-const BASE_URL = 'https://api.themoviedb.org/3';
+const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || "";
+const BASE_URL = "https://api.themoviedb.org/3";
 
-const headers = {
-  'Authorization': `Bearer ${TMDB_API_KEY}`,
-  'Content-Type': 'application/json',
+// Fallback bearer token (kept for local dev if VITE_TMDB_API_KEY is not set)
+const FALLBACK_BEARER =
+  "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIzNDA2YTNlNDUxZjc0NjEzM2QzMjk5NmUzMGVlYjk4NSIsIm5iZiI6MTUzMTUwNjc0Mi42ODUsInN1YiI6IjViNDhmMDM2YzNhMzY4NDUyZDAwZTdlZiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.Y79gp5dxM4slMHKuJZZQii7qu6aSHtcDYM53L9r2GD8";
+
+const headersWithBearer = {
+  Authorization: `Bearer ${FALLBACK_BEARER}`,
+  "Content-Type": "application/json",
 };
+
+const jsonHeaders = {
+  "Content-Type": "application/json",
+};
+
+function buildUrl(
+  path: string,
+  params?: Record<string, string | number | boolean>
+) {
+  const url = new URL(`${BASE_URL}${path}`);
+  if (TMDB_API_KEY) {
+    url.searchParams.set("api_key", String(TMDB_API_KEY));
+  }
+  if (params) {
+    Object.entries(params).forEach(([k, v]) =>
+      url.searchParams.set(k, String(v))
+    );
+  }
+  return url.toString();
+}
 
 export interface TMDBMovie {
   id: number;
@@ -27,48 +51,52 @@ export interface TMDBSearchResult {
   vote_average: number;
 }
 
-export const searchMovies = async (query: string): Promise<TMDBSearchResult[]> => {
-  if (!query.trim()) return [];
-  
-  const response = await fetch(
-    `${BASE_URL}/search/movie?query=${encodeURIComponent(query)}&language=en-US&page=1`,
-    { headers }
-  );
-  
-  if (!response.ok) throw new Error('Failed to search movies');
-  
-  const data = await response.json();
-  return data.results.slice(0, 10);
+export const searchMovies = async (
+  query: string
+): Promise<TMDBSearchResult[]> => {
+  if (!query || !query.trim()) return [];
+
+  const url = buildUrl("/search/movie", {
+    query: query.trim(),
+    language: "en-US",
+    page: 1,
+  });
+  const res = await fetch(url, {
+    headers: TMDB_API_KEY ? jsonHeaders : headersWithBearer,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `TMDB search failed: ${res.status} ${res.statusText} ${text}`
+    );
+  }
+  const data = await res.json();
+  return (data.results || []).slice(0, 10);
 };
 
 export const getMovieDetails = async (movieId: number): Promise<TMDBMovie> => {
-  const response = await fetch(
-    `${BASE_URL}/movie/${movieId}?language=en-US`,
-    { headers }
-  );
-  
-  if (!response.ok) throw new Error('Failed to get movie details');
-  
-  return response.json();
+  const url = buildUrl(`/movie/${movieId}`, { language: "en-US" });
+  const res = await fetch(url, {
+    headers: TMDB_API_KEY ? jsonHeaders : headersWithBearer,
+  });
+  if (!res.ok) throw new Error(`Failed to get movie details (${res.status})`);
+  return res.json();
 };
 
 export const getMovieTrailer = async (movieId: number): Promise<string> => {
-  const response = await fetch(
-    `${BASE_URL}/movie/${movieId}/videos?language=en-US`,
-    { headers }
+  const url = buildUrl(`/movie/${movieId}/videos`, { language: "en-US" });
+  const res = await fetch(url, {
+    headers: TMDB_API_KEY ? jsonHeaders : headersWithBearer,
+  });
+  if (!res.ok) return "";
+  const data = await res.json();
+  const trailer = (data.results || []).find(
+    (video: any) => video.type === "Trailer" && video.site === "YouTube"
   );
-  
-  if (!response.ok) throw new Error('Failed to get movie videos');
-  
-  const data = await response.json();
-  const trailer = data.results.find((video: any) => 
-    video.type === 'Trailer' && video.site === 'YouTube'
-  );
-  
-  return trailer?.key || '';
+  return trailer?.key || "";
 };
 
-export const getImageUrl = (path: string, size: string = 'w500') => {
-  if (!path) return '';
+export const getImageUrl = (path: string, size: string = "w500") => {
+  if (!path) return "";
   return `https://image.tmdb.org/t/p/${size}${path}`;
 };
