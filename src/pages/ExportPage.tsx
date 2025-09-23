@@ -6,7 +6,18 @@ export const ExportPage: React.FC = () => {
   const [films, setFilms] = useState<Film[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
+  // editable copies of all Film fields
+  const [editTmdbId, setEditTmdbId] = useState<string>("");
   const [editTitle, setEditTitle] = useState("");
+  const [editPosterPath, setEditPosterPath] = useState("");
+  const [editBackdropPath, setEditBackdropPath] = useState("");
+  const [editOverview, setEditOverview] = useState("");
+  const [editReleaseDate, setEditReleaseDate] = useState("");
+  const [editVoteAverage, setEditVoteAverage] = useState<string>("");
+  const [editRuntime, setEditRuntime] = useState<string>("");
+  const [editGenres, setEditGenres] = useState("");
+  const [editOriginCountry, setEditOriginCountry] = useState("");
+  const [editTrailerKey, setEditTrailerKey] = useState("");
   const [editLocations, setEditLocations] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -32,7 +43,17 @@ export const ExportPage: React.FC = () => {
 
   const startEdit = (f: Film) => {
     setEditingId(f.id ?? null);
-    setEditTitle(f.title);
+    setEditTmdbId(String(f.tmdb_id ?? ""));
+    setEditTitle(f.title ?? "");
+    setEditPosterPath(f.poster_path ?? "");
+    setEditBackdropPath(f.backdrop_path ?? "");
+    setEditOverview(f.overview ?? "");
+    setEditReleaseDate(f.release_date ?? "");
+    setEditVoteAverage(String(f.vote_average ?? ""));
+    setEditRuntime(String(f.runtime ?? ""));
+    setEditGenres((f.genres || []).join(", "));
+    setEditOriginCountry((f.origin_country || []).join(", "));
+    setEditTrailerKey(f.trailer_key ?? "");
     setEditLocations((f.storage_locations || []).join(", "));
   };
 
@@ -40,15 +61,58 @@ export const ExportPage: React.FC = () => {
     if (editingId == null) return;
     setSaving(true);
     try {
+      const genres = editGenres
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const origin = editOriginCountry
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       const locs = editLocations
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
-      const { error } = await supabase
-        .from("films")
-        .update({ title: editTitle, storage_locations: locs })
-        .eq("id", editingId);
-      if (error) throw error;
+
+      const payload: any = {
+        tmdb_id: Number(editTmdbId) || null,
+        title: editTitle,
+        poster_path: editPosterPath,
+        backdrop_path: editBackdropPath,
+        overview: editOverview,
+        release_date: editReleaseDate,
+        vote_average: parseFloat(editVoteAverage) || 0,
+        runtime: parseInt(editRuntime) || 0,
+        genres,
+        origin_country: origin,
+        trailer_key: editTrailerKey,
+        storage_locations: locs,
+      };
+
+      // try update; if storage_locations column doesn't exist, retry without it
+      const attemptUpdate = async (p: any) => {
+        return await supabase.from("films").update(p).eq("id", editingId);
+      };
+
+      let res = await attemptUpdate(payload);
+      if (res.error) {
+        const msg = (res.error.message || "").toLowerCase();
+        if (
+          msg.includes("storage_locations") ||
+          (msg.includes("column") && msg.includes("storage_locations"))
+        ) {
+          // retry without storage_locations
+          delete payload.storage_locations;
+          const res2 = await attemptUpdate(payload);
+          if (res2.error) throw res2.error;
+          // Partial success: notify user that storage_locations wasn't saved because column missing
+          alert(
+            "Saved changes but 'storage_locations' column does not exist in the database — storage locations were not saved."
+          );
+        } else {
+          throw res.error;
+        }
+      }
       await load();
       setEditingId(null);
     } catch (err) {
@@ -107,18 +171,157 @@ export const ExportPage: React.FC = () => {
 
             <div className="flex-1">
               {editingId === film.id ? (
-                <div className="space-y-2">
-                  <input
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
-                  />
-                  <input
-                    value={editLocations}
-                    onChange={(e) => setEditLocations(e.target.value)}
-                    className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
-                    placeholder="Comma separated locations"
-                  />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="md:col-span-1">
+                      <label className="text-slate-300 text-xs">Poster</label>
+                      <img
+                        src={getImageUrl(editPosterPath, "w154")}
+                        alt="poster"
+                        className="w-full h-auto rounded mt-1"
+                      />
+                    </div>
+                    <div className="md:col-span-2 space-y-2">
+                      <div>
+                        <label className="text-slate-300 text-xs">
+                          TMDB ID
+                        </label>
+                        <input
+                          value={editTmdbId}
+                          onChange={(e) => setEditTmdbId(e.target.value)}
+                          className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-300 text-xs">Title</label>
+                        <input
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-slate-300 text-xs">
+                            Poster path
+                          </label>
+                          <input
+                            value={editPosterPath}
+                            onChange={(e) => setEditPosterPath(e.target.value)}
+                            className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
+                            placeholder="/path/to/poster.jpg"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-300 text-xs">
+                            Backdrop path
+                          </label>
+                          <input
+                            value={editBackdropPath}
+                            onChange={(e) =>
+                              setEditBackdropPath(e.target.value)
+                            }
+                            className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
+                            placeholder="/path/to/backdrop.jpg"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-slate-300 text-xs">Overview</label>
+                    <textarea
+                      value={editOverview}
+                      onChange={(e) => setEditOverview(e.target.value)}
+                      className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600 h-24"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="text-slate-300 text-xs">
+                        Release date
+                      </label>
+                      <input
+                        type="date"
+                        value={editReleaseDate}
+                        onChange={(e) => setEditReleaseDate(e.target.value)}
+                        className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 text-xs">
+                        Vote average
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={editVoteAverage}
+                        onChange={(e) => setEditVoteAverage(e.target.value)}
+                        className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 text-xs">
+                        Runtime (min)
+                      </label>
+                      <input
+                        type="number"
+                        value={editRuntime}
+                        onChange={(e) => setEditRuntime(e.target.value)}
+                        className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 text-xs">
+                        Trailer key
+                      </label>
+                      <input
+                        value={editTrailerKey}
+                        onChange={(e) => setEditTrailerKey(e.target.value)}
+                        className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
+                        placeholder="YouTube key"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-slate-300 text-xs">
+                        Genres (comma separated)
+                      </label>
+                      <input
+                        value={editGenres}
+                        onChange={(e) => setEditGenres(e.target.value)}
+                        className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
+                        placeholder="Animation, Family, Comedy"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 text-xs">
+                        Origin countries (comma separated)
+                      </label>
+                      <input
+                        value={editOriginCountry}
+                        onChange={(e) => setEditOriginCountry(e.target.value)}
+                        className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
+                        placeholder="US,GB"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-slate-300 text-xs">
+                      Storage locations (comma separated)
+                    </label>
+                    <input
+                      value={editLocations}
+                      onChange={(e) => setEditLocations(e.target.value)}
+                      className="w-full bg-slate-700 text-white rounded px-3 py-2 border border-slate-600"
+                      placeholder="Comma separated locations"
+                    />
+                  </div>
                 </div>
               ) : (
                 <>

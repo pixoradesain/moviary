@@ -1,7 +1,13 @@
-import React from 'react';
-import { X, Star, Clock, MapPin } from 'lucide-react';
-import { Film } from '../lib/supabase';
-import { getImageUrl } from '../lib/tmdb';
+import React, { useEffect, useState } from "react";
+import { X, Star, Clock, MapPin } from "lucide-react";
+import { Film } from "../lib/supabase";
+import { getImageUrl, getLocalizedMovie } from "../lib/tmdb";
+
+// simple module-level cache for localized movie data
+const localizedCache = new Map<
+  number,
+  { title?: string; poster_path?: string; backdrop_path?: string }
+>();
 
 interface FilmDetailsProps {
   film: Film;
@@ -9,7 +15,50 @@ interface FilmDetailsProps {
   onClose: () => void;
 }
 
-export const FilmDetails: React.FC<FilmDetailsProps> = ({ film, isOpen, onClose }) => {
+export const FilmDetails: React.FC<FilmDetailsProps> = ({
+  film,
+  isOpen,
+  onClose,
+}) => {
+  const [localized, setLocalized] = useState<{
+    title?: string;
+    poster_path?: string;
+    backdrop_path?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const shouldLocalize = (film.origin_country || []).some(
+      (c) => String(c).toUpperCase() === "ID"
+    );
+    if (!shouldLocalize) return;
+
+    const cached = localizedCache.get(film.tmdb_id);
+    if (cached) {
+      setLocalized(cached);
+      return;
+    }
+
+    getLocalizedMovie(film.tmdb_id, "id")
+      .then((res) => {
+        if (!mounted || !res) return;
+        const obj = {
+          title: res.title,
+          poster_path: res.poster_path,
+          backdrop_path: res.backdrop_path,
+        };
+        localizedCache.set(film.tmdb_id, obj);
+        setLocalized(obj);
+      })
+      .catch(() => {
+        /* ignore localization errors */
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [film.tmdb_id, film.origin_country]);
+
   if (!isOpen) return null;
 
   const formatRuntime = (minutes: number) => {
@@ -28,11 +77,14 @@ export const FilmDetails: React.FC<FilmDetailsProps> = ({ film, isOpen, onClose 
           >
             <X className="w-6 h-6" />
           </button>
-          
+
           <div className="relative h-64 md:h-80 overflow-hidden rounded-t-lg">
             <img
-              src={getImageUrl(film.backdrop_path, 'w1280')}
-              alt={film.title}
+              src={getImageUrl(
+                localized?.backdrop_path || film.backdrop_path,
+                "w1280"
+              )}
+              alt={localized?.title || film.title}
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-800 via-transparent to-transparent" />
@@ -43,29 +95,40 @@ export const FilmDetails: React.FC<FilmDetailsProps> = ({ film, isOpen, onClose 
           <div className="flex flex-col md:flex-row gap-6">
             <div className="flex-shrink-0">
               <img
-                src={getImageUrl(film.poster_path, 'w300')}
-                alt={film.title}
+                src={getImageUrl(
+                  localized?.poster_path || film.poster_path,
+                  "w300"
+                )}
+                alt={localized?.title || film.title}
                 className="w-48 h-72 object-cover rounded-lg mx-auto md:mx-0"
               />
             </div>
 
             <div className="flex-1">
-              <h1 className="text-3xl font-bold text-white mb-4">{film.title}</h1>
+              <h1 className="text-3xl font-bold text-white mb-4">
+                {localized?.title || film.title}
+              </h1>
 
               <div className="flex flex-wrap items-center gap-4 mb-6">
                 <div className="flex items-center space-x-1">
                   <Star className="text-amber-400 w-5 h-5 fill-current" />
-                  <span className="text-white font-medium">{film.vote_average.toFixed(1)}</span>
+                  <span className="text-white font-medium">
+                    {film.vote_average.toFixed(1)}
+                  </span>
                 </div>
 
                 <div className="flex items-center space-x-1">
                   <Clock className="text-slate-400 w-5 h-5" />
-                  <span className="text-slate-300">{formatRuntime(film.runtime)}</span>
+                  <span className="text-slate-300">
+                    {formatRuntime(film.runtime)}
+                  </span>
                 </div>
 
                 <div className="flex items-center space-x-1">
                   <MapPin className="text-slate-400 w-5 h-5" />
-                  <span className="text-slate-300">{film.origin_country.join(', ')}</span>
+                  <span className="text-slate-300">
+                    {film.origin_country.join(", ")}
+                  </span>
                 </div>
 
                 <span className="text-slate-300">
@@ -87,13 +150,19 @@ export const FilmDetails: React.FC<FilmDetailsProps> = ({ film, isOpen, onClose 
               </div>
 
               <div className="mb-6">
-                <h2 className="text-xl font-semibold text-white mb-3">Synopsis</h2>
-                <p className="text-slate-300 leading-relaxed">{film.overview}</p>
+                <h2 className="text-xl font-semibold text-white mb-3">
+                  Synopsis
+                </h2>
+                <p className="text-slate-300 leading-relaxed">
+                  {film.overview}
+                </p>
               </div>
 
               {film.trailer_key && (
                 <div>
-                  <h2 className="text-xl font-semibold text-white mb-3">Trailer</h2>
+                  <h2 className="text-xl font-semibold text-white mb-3">
+                    Trailer
+                  </h2>
                   <div className="aspect-video rounded-lg overflow-hidden">
                     <iframe
                       src={`https://www.youtube.com/embed/${film.trailer_key}`}

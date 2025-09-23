@@ -100,3 +100,41 @@ export const getImageUrl = (path: string, size: string = "w500") => {
   if (!path) return "";
   return `https://image.tmdb.org/t/p/${size}${path}`;
 };
+
+// Fetch movie details using a language override and attempt to return localized title/overview/poster/backdrop
+export const getLocalizedMovie = async (movieId: number, lang: string) => {
+  if (!movieId) return null;
+
+  const detailsUrl = buildUrl(`/movie/${movieId}`, { language: lang });
+  const imagesUrl = buildUrl(`/movie/${movieId}/images`);
+
+  const [detailsRes, imagesRes]: [Response, Response] = await Promise.all([
+    fetch(detailsUrl, {
+      headers: TMDB_API_KEY ? jsonHeaders : headersWithBearer,
+    }),
+    fetch(imagesUrl, {
+      headers: TMDB_API_KEY ? jsonHeaders : headersWithBearer,
+    }),
+  ]);
+
+  if (!detailsRes.ok)
+    throw new Error(`Failed to fetch localized details (${detailsRes.status})`);
+  const details = await detailsRes.json();
+
+  let posterPath = details.poster_path;
+  if (imagesRes.ok) {
+    const images = await imagesRes.json();
+    const posters: any[] = images.posters || [];
+    const localizedPoster =
+      posters.find((p) => p.iso_639_1 === lang) ||
+      posters.find((p) => p.iso_639_1 === null);
+    posterPath = localizedPoster?.file_path || posterPath;
+  }
+
+  return {
+    title: details.title,
+    overview: details.overview,
+    poster_path: posterPath,
+    backdrop_path: details.backdrop_path,
+  };
+};

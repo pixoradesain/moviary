@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Search, Loader2 } from "lucide-react";
 import {
   searchMovies,
@@ -11,7 +10,7 @@ import {
 import { supabase, Film } from "../lib/supabase";
 
 export const AddFilmPage: React.FC = () => {
-  const navigate = useNavigate();
+  // navigation removed — remain on this page after adding a film
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<TMDBSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -85,13 +84,13 @@ export const AddFilmPage: React.FC = () => {
 
       if (error) throw error;
 
-      // Show success and redirect to home after short delay
+      // Show success but remain on the add page so the user can add more films
       setAddSuccess(true);
       setAddedTitle(details.title);
       setTimeout(() => {
         setAddSuccess(false);
         setAddedTitle(null);
-        navigate("/");
+        // intentionally stay on this page (no navigate) to allow adding more films
       }, 1500);
     } catch (error) {
       console.error("Error adding film:", error);

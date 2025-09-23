@@ -64,6 +64,17 @@ export const HomePage: React.FC<HomePageProps> = ({ onSearch }) => {
       return true;
     });
 
+    // Sort so latest-year films are shown first, and within the same year titles are ascending (A→Z)
+    result.sort((a, b) => {
+      const yearA = a.release_date ? new Date(a.release_date).getFullYear() : 0;
+      const yearB = b.release_date ? new Date(b.release_date).getFullYear() : 0;
+      if (yearA !== yearB) return yearB - yearA; // newest year first
+      // same year — sort title ascending
+      const ta = (a.title || "").toLowerCase();
+      const tb = (b.title || "").toLowerCase();
+      return ta.localeCompare(tb);
+    });
+
     setFilteredFilms(result);
   };
 
