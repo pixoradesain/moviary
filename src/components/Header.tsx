@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Film, Search, Plus } from "lucide-react";
+import { SUPABASE_CONFIGURED } from "../lib/supabase";
 
 interface HeaderProps {
   onSearch: (query: string) => void;
@@ -17,6 +18,12 @@ export const Header: React.FC<HeaderProps> = ({ onSearch }) => {
 
   return (
     <header className="bg-slate-900 border-b border-slate-700">
+      {/* show warning if supabase not configured in deploy */}
+      {!SUPABASE_CONFIGURED && (
+        <div className="bg-amber-600 text-slate-900 text-sm py-2 text-center">
+          Site not connected to Supabase — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Netlify environment variables, then redeploy.
+        </div>
+      )}
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
